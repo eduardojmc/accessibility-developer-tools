@@ -294,9 +294,8 @@ axs.utils.isLargeFont = function(style) {
 axs.utils.getBgColor = function(style, element) {
     var bgColorString = style.backgroundColor;
     var bgColor = axs.utils.parseColor(bgColorString);
-    if (!bgColor) {
+    if (!bgColor)
         return null;
-    }
 
     if (style.opacity < 1)
         bgColor.alpha = bgColor.alpha * style.opacity
