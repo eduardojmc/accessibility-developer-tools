@@ -25,8 +25,9 @@ axs.AuditRule.specs.focusableElementNotVisibleAndNotAriaHidden = {
     heading: 'These elements are focusable but either invisible or obscured by another element',
     url: 'https://github.com/GoogleChrome/accessibility-developer-tools/wiki/Audit-Rules#-ax_focus_01--these-elements-are-focusable-but-either-invisible-or-obscured-by-another-element',
     severity: axs.constants.Severity.WARNING,
-    relevantNodesSelector: function(scope) {
-        return scope.querySelectorAll(axs.utils.FOCUSABLE_ELEMENTS_SELECTOR);
+    relevantElementMatcher: function(element) {
+        return axs.browserUtils.matchSelector(
+            element, axs.utils.FOCUSABLE_ELEMENTS_SELECTOR);
     },
     test: function(element) {
         if (axs.utils.isElementOrAncestorHidden(element))

@@ -25,13 +25,13 @@ axs.AuditRule.specs.controlsWithoutLabel = {
     heading: 'Controls and media elements should have labels',
     url: 'https://github.com/GoogleChrome/accessibility-developer-tools/wiki/Audit-Rules#-ax_text_01--controls-and-media-elements-should-have-labels',
     severity: axs.constants.Severity.SEVERE,
-    relevantNodesSelector: function(scope) {
+    relevantElementMatcher: function(element) {
         var controlsSelector = ['input:not([type="hidden"]):not([disabled])',
                                 'select:not([disabled])',
                                 'textarea:not([disabled])',
                                 'button:not([disabled])',
                                 'video:not([disabled])'].join(', ');
-        return scope.querySelectorAll(controlsSelector);
+        return axs.browserUtils.matchSelector(element, controlsSelector);
     },
     test: function(control) {
         if (axs.utils.isElementOrAncestorHidden(control))
