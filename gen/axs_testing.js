@@ -1259,24 +1259,30 @@ axs.AuditRule = function(a) {
 axs.AuditRule.requiredFields = "name severity relevantElementMatcher test code heading".split(" ");
 axs.AuditRule.NOT_APPLICABLE = {result:axs.constants.AuditResult.NA};
 axs.AuditRule.prototype.addElement = function(a, b) {
-  console.log("axs.AuditRule.prototype.addElement");
   a.push(b)
 };
 axs.AuditRule.collectMatchingElements = function(a, b, c) {
   if(a.nodeType == Node.ELEMENT_NODE) {
     var d = a
   }
+  if(a.nodeType == Node.DOCUMENT_FRAGMENT_NODE) {
+    var e = a
+  }
   d && b.call(null, d) && c.push(d);
   if(a.webkitShadowRoot) {
     axs.AuditRule.collectMatchingElements(a.webkitShadowRoot, b, c)
   }else {
-    if(d && "content" == d.tagName.toLowerCase()) {
-      for(a = d.getDistributedNodes(), d = 0;d < a.length;d++) {
-        axs.AuditRule.collectMatchingElements(a[d], b, c)
-      }
+    if(e && e.olderShadowRoot) {
+      axs.AuditRule.collectMatchingElements(e.olderShadowRoot, b, c)
     }else {
-      for(a = a.firstChild;null != a;) {
-        axs.AuditRule.collectMatchingElements(a, b, c), a = a.nextSibling
+      if(d && "content" == d.tagName.toLowerCase()) {
+        for(a = d.getDistributedNodes(), d = 0;d < a.length;d++) {
+          axs.AuditRule.collectMatchingElements(a[d], b, c)
+        }
+      }else {
+        for(a = a.firstChild;null != a;) {
+          axs.AuditRule.collectMatchingElements(a, b, c), a = a.nextSibling
+        }
       }
     }
   }
@@ -1284,16 +1290,12 @@ axs.AuditRule.collectMatchingElements = function(a, b, c) {
 axs.AuditRule.prototype.run = function(a, b) {
   var c = a || [], d = [];
   axs.AuditRule.collectMatchingElements(b || document, this.relevantElementMatcher_, d);
-  console.log("relevantElements foo", d);
   var e = [];
   if(!d.length) {
     return{result:axs.constants.AuditResult.NA}
   }
-  console.log("got >0 relevant elements");
   for(var f = 0;f < d.length;f++) {
-    var g = d[f];
-    console.log("testing", g);
-    var h;
+    var g = d[f], h;
     a: {
       h = g;
       for(var k = 0;k < c.length;k++) {
@@ -1544,13 +1546,20 @@ axs.AuditRule.specs.requiredAriaAttributeMissing = {name:"requiredAriaAttributeM
   }
 }, code:"AX_ARIA_03"};
 axs.AuditRule.specs.unfocusableElementsWithOnClick = {name:"unfocusableElementsWithOnClick", heading:"Elements with onclick handlers must be focusable", url:"https://github.com/GoogleChrome/accessibility-developer-tools/wiki/Audit-Rules#-ax_focus_02--elements-with-onclick-handlers-must-be-focusable", severity:axs.constants.Severity.WARNING, opt_requiresConsoleAPI:!0, relevantElementMatcher:function(a) {
-  if(a instanceof a.ownerDocument.defaultView.HTMLBodyElement || axs.utils.isElementOrAncestorHidden(a)) {
+  if(a instanceof a.ownerDocument.defaultView.HTMLBodyElement) {
     return!1
   }
-  if("click" in getEventListeners(a)) {
-    return!0
+  if(axs.utils.isElementOrAncestorHidden(a)) {
+    return"selected" == a.className && console.log("hidden", a), !1
   }
+  var b = getEventListeners(a);
+  if("click" in b) {
+    return console.log("had click listener", a), !0
+  }
+  "SPAN" == a.tagName && console.log("no click listener", a, b);
+  return!1
 }, test:function(a) {
+  console.log(a, "has tabIndex?", a.hasAttribute("tabindex"), "implicitly focusable?", axs.utils.isElementImplicitlyFocusable(a));
   return!a.hasAttribute("tabindex") && !axs.utils.isElementImplicitlyFocusable(a)
 }, code:"AX_FOCUS_02"};
 axs.AuditRule.specs.videoWithoutCaptions = {name:"videoWithoutCaptions", heading:"Video elements should use <track> elements to provide captions", url:"https://github.com/GoogleChrome/accessibility-developer-tools/wiki/Audit-Rules#-ax_video_01--video-elements-should-use-track-elements-to-provide-captions", severity:axs.constants.Severity.WARNING, relevantElementMatcher:function(a) {

@@ -106,7 +106,6 @@ axs.AuditRule.NOT_APPLICABLE = { result: axs.constants.AuditResult.NA };
  * @param {Element} element
  */
 axs.AuditRule.prototype.addElement = function(elements, element) {
-    console.log('axs.AuditRule.prototype.addElement');
     elements.push(element);
 };
 
@@ -120,15 +119,24 @@ axs.AuditRule.prototype.addElement = function(elements, element) {
 axs.AuditRule.collectMatchingElements = function(node, matcher, collection) {
     if (node.nodeType == Node.ELEMENT_NODE)
         var element = /** @type {Element} */ (node);
+    if (node.nodeType == Node.DOCUMENT_FRAGMENT_NODE)
+        var shadowRoot = node;
 
     if (element && matcher.call(null, element))
         collection.push(element);
 
-    // Descend into element:
+    // Descend into node:
     // If it has a ShadowRoot, ignore all child elements - these will be picked
     // up by the <content> elements. Descend straight into the ShadowRoot.
     if (node.webkitShadowRoot) {
         axs.AuditRule.collectMatchingElements(node.webkitShadowRoot,
+                                              matcher,
+                                              collection);
+        return;
+    }
+
+    if (shadowRoot && shadowRoot.olderShadowRoot) {
+        axs.AuditRule.collectMatchingElements(shadowRoot.olderShadowRoot,
                                               matcher,
                                               collection);
         return;
@@ -167,7 +175,6 @@ axs.AuditRule.prototype.run = function(opt_ignoreSelectors, opt_scope) {
 
     var relevantElements = [];
     axs.AuditRule.collectMatchingElements(scope, this.relevantElementMatcher_, relevantElements);
-    console.log('relevantElements foo', relevantElements);
 
     var failingElements = [];
 
@@ -181,10 +188,8 @@ axs.AuditRule.prototype.run = function(opt_ignoreSelectors, opt_scope) {
 
     if (!relevantElements.length)
         return { result: axs.constants.AuditResult.NA };
-    console.log('got >0 relevant elements');
     for (var i = 0; i < relevantElements.length; i++) {
         var element = relevantElements[i];
-        console.log('testing', element);
         if (!ignored(element) && this.test_(element))
             this.addElement(failingElements, element);
     }

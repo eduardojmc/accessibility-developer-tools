@@ -27,15 +27,26 @@ axs.AuditRule.specs.unfocusableElementsWithOnClick = {
     severity: axs.constants.Severity.WARNING,
     opt_requiresConsoleAPI: true,
     relevantElementMatcher: function(element) {
-        if (element instanceof element.ownerDocument.defaultView.HTMLBodyElement)
+        if (element instanceof element.ownerDocument.defaultView.HTMLBodyElement) {
             return false;
-        if (axs.utils.isElementOrAncestorHidden(element))
+        }
+        if (axs.utils.isElementOrAncestorHidden(element)) {
+            if (element.className == 'selected')
+                console.log('hidden', element);
             return false;
+        }
         var eventListeners = getEventListeners(element);
-        if ('click' in eventListeners)
+        if ('click' in eventListeners) {
+            console.log('had click listener', element);
             return true;
+        }
+        if (element.tagName == "SPAN")
+            console.log('no click listener', element, eventListeners);
+        return false;
     },
     test: function(element) {
+        console.log(element, 'has tabIndex?', element.hasAttribute('tabindex'), 'implicitly focusable?',
+               axs.utils.isElementImplicitlyFocusable(element));
         return !element.hasAttribute('tabindex') &&
                !axs.utils.isElementImplicitlyFocusable(element);
     },
