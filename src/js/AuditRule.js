@@ -120,7 +120,7 @@ axs.AuditRule.collectMatchingElements = function(node, matcher, collection) {
     if (node.nodeType == Node.ELEMENT_NODE)
         var element = /** @type {Element} */ (node);
     if (node.nodeType == Node.DOCUMENT_FRAGMENT_NODE)
-        var shadowRoot = node;
+        var shadowRoot = /** @type {ShadowRoot} */ (node);
 
     if (element && matcher.call(null, element))
         collection.push(element);
@@ -145,7 +145,8 @@ axs.AuditRule.collectMatchingElements = function(node, matcher, collection) {
     // If it is a <content> element, descend into distributed elements - these
     // are the children of the parent of the ShadowRoot.
     if (element && element.tagName.toLowerCase() == 'content') {
-        var distributedNodes = element.getDistributedNodes();
+        var content = /** @type {HTMLContentElement} */ (element);
+        var distributedNodes = content.getDistributedNodes();
         for (var i = 0; i < distributedNodes.length; i++) {
             axs.AuditRule.collectMatchingElements(distributedNodes[i],
                                                   matcher,

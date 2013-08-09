@@ -25,3 +25,25 @@ var getEventListeners = function(element) { };
  * @type {Element}
  */
 HTMLLabelElement.prototype.control;
+
+/**
+ * @constructor
+ * @extends {DocumentFragment}
+ */
+function ShadowRoot() {}
+
+/**
+ * @type {ShadowRoot}
+ */
+ShadowRoot.prototype.olderShadowRoot;
+
+/**
+ * @constructor
+ * @extends {HTMLElement}
+ */
+function HTMLContentElement() {}
+
+/**
+ * @return {Array.<Node>}
+ */
+HTMLContentElement.prototype.getDistributedNodes = function() {};
