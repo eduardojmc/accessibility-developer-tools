@@ -1275,28 +1275,25 @@ axs.AuditRule.NOT_APPLICABLE = {result:axs.constants.AuditResult.NA};
 axs.AuditRule.prototype.addElement = function(a, b) {
   a.push(b)
 };
-axs.AuditRule.collectMatchingElements = function(a, b, c) {
+axs.AuditRule.collectMatchingElements = function(a, b, c, d) {
   if(a.nodeType == Node.ELEMENT_NODE) {
-    var d = a
-  }
-  if(a.nodeType == Node.DOCUMENT_FRAGMENT_NODE) {
     var e = a
   }
-  d && b.call(null, d) && c.push(d);
+  e && b.call(null, e) && c.push(e);
   if(a.webkitShadowRoot) {
-    axs.AuditRule.collectMatchingElements(a.webkitShadowRoot, b, c)
+    axs.AuditRule.collectMatchingElements(a.webkitShadowRoot, b, c, a.webkitShadowRoot)
   }else {
-    if(e && e.olderShadowRoot) {
-      axs.AuditRule.collectMatchingElements(e.olderShadowRoot, b, c)
+    if(e && "content" == e.localName) {
+      e = e.getDistributedNodes();
+      for(a = 0;a < e.length;a++) {
+        axs.AuditRule.collectMatchingElements(e[a], b, c, d)
+      }
     }else {
-      if(d && "content" == d.tagName.toLowerCase()) {
-        a = d.getDistributedNodes();
-        for(d = 0;d < a.length;d++) {
-          axs.AuditRule.collectMatchingElements(a[d], b, c)
-        }
+      if(e && "shadow" == e.localName) {
+        a = e, d ? (d = d.olderShadowRoot || a.olderShadowRoot) && axs.AuditRule.collectMatchingElements(d, b, c, d) : console.warn("ShadowRoot not provided for", e)
       }else {
-        for(a = a.firstChild;null != a;) {
-          axs.AuditRule.collectMatchingElements(a, b, c), a = a.nextSibling
+        for(e = a.firstChild;null != e;) {
+          axs.AuditRule.collectMatchingElements(e, b, c, d), e = e.nextSibling
         }
       }
     }
@@ -1566,20 +1563,16 @@ axs.AuditRule.specs.imagesWithoutAltText = {name:"imagesWithoutAltText", heading
   return!a.hasAttribute("alt") && "presentation" != a.getAttribute("role")
 }, code:"AX_TEXT_02"};
 axs.AuditRule.specs.unfocusableElementsWithOnClick = {name:"unfocusableElementsWithOnClick", heading:"Elements with onclick handlers must be focusable", url:"https://github.com/GoogleChrome/accessibility-developer-tools/wiki/Audit-Rules#-ax_focus_02--elements-with-onclick-handlers-must-be-focusable", severity:axs.constants.Severity.WARNING, opt_requiresConsoleAPI:!0, relevantElementMatcher:function(a) {
-  if(a instanceof a.ownerDocument.defaultView.HTMLBodyElement) {
+  if(a instanceof a.ownerDocument.defaultView.HTMLBodyElement || axs.utils.isElementOrAncestorHidden(a) && "selected" == a.className) {
     return!1
   }
-  if(axs.utils.isElementOrAncestorHidden(a)) {
-    return"selected" == a.className && console.log("hidden", a), !1
+  if("click" in getEventListeners(a)) {
+    return!0
   }
-  var b = getEventListeners(a);
-  if("click" in b) {
-    return console.log("had click listener", a), !0
+  if("SPAN" == a.tagName) {
+    return!1
   }
-  "SPAN" == a.tagName && console.log("no click listener", a, b);
-  return!1
 }, test:function(a) {
-  console.log(a, "has tabIndex?", a.hasAttribute("tabindex"), "implicitly focusable?", axs.utils.isElementImplicitlyFocusable(a));
   return!a.hasAttribute("tabindex") && !axs.utils.isElementImplicitlyFocusable(a)
 }, code:"AX_FOCUS_02"};
 
