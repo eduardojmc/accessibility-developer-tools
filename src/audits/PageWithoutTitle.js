@@ -24,15 +24,16 @@ axs.AuditRule.specs.pageWithoutTitle = {
     url: '',
     severity: axs.constants.Severity.WARNING,
     relevantElementMatcher: function(element) {
-        return element.tagName.toLowerCase() == "document";
+        return element.tagName.toLowerCase() == "html";
     },
     test: function(scope) {
         var head = scope.querySelector('head');
-        if (!head) {
+        if (!head)
           return true;
-        }
         var title = head.querySelector('title');
-        return !title.length || !title[0].textContent;
+        if (!title)
+            return true;
+        return !title.textContent;
     },
     code: 'AX_TITLE_01'
 };

@@ -1,6 +1,22 @@
+// Copyright 2012 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 module("Contrast Ratio", {
   setup: function () {
-    this.fixture_ = document.getElementById('fixture');
+    var fixture = document.createElement('div');
+    document.getElementById('qunit-fixture').appendChild(fixture);
+    this.fixture_ = fixture;
     this.black_ = {"red": 0, "green": 0, "blue": 0, "alpha": 1};
     this.white_ = {"red": 255, "green": 255, "blue": 255, "alpha": 1};
   }
@@ -19,7 +35,9 @@ test("Transparent foreground === no contrast.", function () {
 
 module("Zero Area", {
   setup: function () {
-    this.fixture_ = document.getElementById('fixture');
+    var fixture = document.createElement('div');
+    document.getElementById('qunit-fixture').appendChild(fixture);
+    this.fixture_ = fixture;
   }
 });
 test("Large element has non-zero area.", function () {
@@ -45,7 +63,9 @@ test("Inline element has non-zero area.", function () {
 
 module("Transparency", {
   setup: function () {
-    this.fixture_ = document.getElementById('fixture');
+    var fixture = document.createElement('div');
+    document.getElementById('qunit-fixture').appendChild(fixture);
+    this.fixture_ = fixture;
   }
 });
 test("Transparent elements are transparent.", function () {
@@ -93,10 +113,20 @@ test("A placeholder counts a label.", function() {
   element3.placeholder = "Add me to your mailing list";
   equal(axs.utils.hasLabel(element3), false);
 });
+test('axs.utils.hasLabel() does not crash for element with numeric id attribute', function() {
+    var element = document.createElement('input');
+    element.setAttribute('id', '123_user');
+
+    try {
+        equal(axs.utils.hasLabel(element), false);
+    } catch(e) {
+        ok(false, 'Threw exception: ' + e);
+    }
+});
 
 module("getQuerySelectorText", {
   setup: function () {
-    this.fixture_ = document.getElementById('fixture');
+    this.fixture_ = document.getElementById('qunit-fixture');
   }
 });
 test("returns the selector text for a nested object with a class attribute", function() {
@@ -106,5 +136,5 @@ test("returns the selector text for a nested object with a class attribute", fun
   targetParentNode.appendChild(targetNode);
   this.fixture_.appendChild(targetParentNode);
 
-  equal(axs.utils.getQuerySelectorText(targetNode), "#fixture > P > .foo");
+  equal(axs.utils.getQuerySelectorText(targetNode), "#qunit-fixture > P > .foo");
 });

@@ -129,18 +129,90 @@ axs.utils.elementHasZeroArea = function(element) {
  * @return {boolean}
  */
 axs.utils.elementIsOutsideScrollArea = function(element) {
-    var rect = element.getBoundingClientRect();
-    var scroll_height = document.body.scrollHeight;
-    var scroll_width = document.body.scrollWidth;
-    var scroll_top = document.body.scrollTop;
-    var scroll_left = document.body.scrollLeft;
+    var parent = element.parentElement;
 
-    if (rect.top >= scroll_height || rect.bottom <= -scroll_top ||
-        rect.left >= scroll_width || rect.right <= -scroll_left)
-        return true;
-    return false;
+    var defaultView = element.ownerDocument.defaultView;
+    while (parent != defaultView.document.body) {
+        if (axs.utils.isClippedBy(element, parent))
+            return true;
+
+        if (axs.utils.canScrollTo(element, parent) && !axs.utils.elementIsOutsideScrollArea(parent))
+            return false;
+
+        parent = parent.parentElement;
+    }
+
+    return !axs.utils.canScrollTo(element, defaultView.document.body);
 };
 
+/**
+ * Checks whether it's possible to scroll to the given element within the given container.
+ * Assumes that |container| is an ancestor of |element|.
+ * If |container| cannot be scrolled, returns True if the element is within its bounding client
+ * rect.
+ * @param {Element} element
+ * @param {Element} container
+ * @return {boolean} True iff it's possible to scroll to |element| within |container|.
+ */
+axs.utils.canScrollTo = function(element, container) {
+    var rect = element.getBoundingClientRect();
+    var containerRect = container.getBoundingClientRect();
+    var containerTop = containerRect.top;
+    var containerLeft = containerRect.left;
+    var containerScrollArea =
+        { top: containerTop - container.scrollTop,
+          bottom: containerTop - container.scrollTop + container.scrollHeight,
+          left: containerLeft - container.scrollLeft,
+          right: containerLeft - container.scrollLeft + container.scrollWidth };
+
+    if (rect.right < containerScrollArea.left || rect.bottom < containerScrollArea.top ||
+            rect.left > containerScrollArea.right || rect.top > containerScrollArea.bottom) {
+        return false;
+    }
+
+    var defaultView = element.ownerDocument.defaultView;
+    var style = defaultView.getComputedStyle(container);
+
+    if (rect.left > containerRect.right || rect.top > containerRect.bottom) {
+        return (style.overflow == 'scroll' || style.overflow == 'auto' ||
+                container instanceof defaultView.HTMLBodyElement);
+    }
+
+    return true;
+};
+
+/**
+ * Checks whether the given element is clipped by the given container.
+ * Assumes that |container| is an ancestor of |element|.
+ * @param {Element} element
+ * @param {Element} container
+ * @return {boolean} True iff |element| is clipped by |container|.
+ */
+axs.utils.isClippedBy = function(element, container) {
+    var rect = element.getBoundingClientRect();
+    var containerRect = container.getBoundingClientRect();
+    var containerTop = containerRect.top;
+    var containerLeft = containerRect.left;
+    var containerScrollArea =
+        { top: containerTop - container.scrollTop,
+          bottom: containerTop - container.scrollTop + container.scrollHeight,
+          left: containerLeft - container.scrollLeft,
+          right: containerLeft - container.scrollLeft + container.scrollWidth };
+
+    var defaultView = element.ownerDocument.defaultView;
+    var style = defaultView.getComputedStyle(container);
+
+    if ((rect.right < containerRect.left || rect.bottom < containerRect.top ||
+             rect.left > containerRect.right || rect.top > containerRect.bottom) &&
+             style.overflow == 'hidden') {
+        return true;
+    }
+
+    if (rect.right < containerScrollArea.left || rect.bottom < containerScrollArea.top)
+        return (style.overflow != 'visible');
+
+    return false;
+};
 
 /**
  * @param {Node} ancestor A potential ancestor of |node|.
@@ -159,24 +231,40 @@ axs.utils.isAncestor = function(ancestor, node) {
 
 /**
  * @param {Element} element
- * @return {?Element}
+ * @return {Array.<Element>} An array of any non-transparent elements which
+ *     overlap the given element.
  */
-axs.utils.overlappingElement = function(element) {
+axs.utils.overlappingElements = function(element) {
     if (axs.utils.elementHasZeroArea(element))
         return null;
 
-    var rect = element.getBoundingClientRect();
-    var center_x = (rect.left + rect.right) / 2;
-    var center_y = (rect.top + rect.bottom) / 2;
-    var element_at_point = document.elementFromPoint(center_x, center_y);
+    var overlappingElements = [];
+    var clientRects = element.getClientRects();
+    for (var i = 0; i < clientRects.length; i++) {
+        var rect = clientRects[i];
+        var center_x = (rect.left + rect.right) / 2;
+        var center_y = (rect.top + rect.bottom) / 2;
+        var elementAtPoint = document.elementFromPoint(center_x, center_y);
 
-    if (element_at_point != null && element_at_point != element &&
-        !axs.utils.isAncestor(element_at_point, element) &&
-        !axs.utils.isAncestor(element, element_at_point)) {
-        return element_at_point;
+        if (elementAtPoint == null || elementAtPoint == element ||
+            axs.utils.isAncestor(elementAtPoint, element) ||
+            axs.utils.isAncestor(element, elementAtPoint)) {
+            continue;
+        }
+
+        var overlappingElementStyle = window.getComputedStyle(elementAtPoint, null);
+        if (!overlappingElementStyle)
+            continue;
+
+        var overlappingElementBg = axs.utils.getBgColor(overlappingElementStyle,
+                                                        elementAtPoint);
+        if (overlappingElementBg && overlappingElementBg.alpha > 0 &&
+            overlappingElements.indexOf(elementAtPoint) < 0) {
+            overlappingElements.push(elementAtPoint);
+        }
     }
 
-    return null;
+    return overlappingElements;
 };
 
 /**
@@ -227,15 +315,11 @@ axs.utils.elementIsVisible = function(element) {
         return false;
     if (axs.utils.elementIsOutsideScrollArea(element))
         return false;
-    var overlappingElement = axs.utils.overlappingElement(element);
-    if (overlappingElement) {
-        var overlappingElementStyle = window.getComputedStyle(overlappingElement, null);
-        if (overlappingElementStyle) {
-            var overlappingElementBg = axs.utils.getBgColor(overlappingElementStyle, overlappingElement);
-            if (overlappingElementBg && overlappingElementBg.alpha > 0)
-                return false;
-        }
-    }
+
+    var overlappingElements = axs.utils.overlappingElements(element);
+    if (overlappingElements.length)
+        return false;
+
     return true;
 };
 
@@ -279,7 +363,7 @@ axs.utils.isLargeFont = function(style) {
     matches = fontSize.match(/(\d+)pt/);
     if (matches) {
         var fontSizePt = parseInt(matches[1], 10);
-        if (bold && fontSizePt >= 14 || fontSizePt >= 14)
+        if (bold && fontSizePt >= 14 || fontSizePt >= 18)
             return true;
         return false;
     }
@@ -820,10 +904,15 @@ axs.utils.isNativeTextElement = function(element) {
  * @return {boolean}
  */
 axs.utils.isLowContrast = function(contrastRatio, style, opt_strict) {
-    if (!opt_strict)
-        return contrastRatio < 3.0 || (!axs.utils.isLargeFont(style) && contrastRatio < 4.5);
-    else
-        return contrastRatio < 4.5 || (!axs.utils.isLargeFont(style) && contrastRatio < 7.0);
+    // Round to nearest 0.1
+    var roundedContrastRatio = (Math.round(contrastRatio * 10) / 10);
+    if (!opt_strict) {
+        return roundedContrastRatio < 3.0 ||
+            (!axs.utils.isLargeFont(style) && roundedContrastRatio < 4.5);
+    } else {
+        return roundedContrastRatio < 4.5 ||
+            (!axs.utils.isLargeFont(style) && roundedContrastRatio < 7.0);
+    }
 };
 
 /**
@@ -853,7 +942,7 @@ axs.utils.hasLabel = function(element) {
         return true;
 
     if (element.hasAttribute('id')) {
-        var labelsFor = document.querySelectorAll('label[for=' + element.id + ']');
+        var labelsFor = document.querySelectorAll('label[for="' + element.id + '"]');
         if (labelsFor.length > 0)
             return true;
     }

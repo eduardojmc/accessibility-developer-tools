@@ -29,10 +29,68 @@ axs.properties.TEXT_CONTENT_XPATH = './/text()[normalize-space(.)!=""]/parent::*
 axs.properties.getFocusProperties = function(element) {
     var focusProperties = {};
     var tabindex = element.getAttribute('tabindex');
-    if (tabindex != undefined)
-        return { tabindex: { value: tabindex, valid: true }};
-    return null;
+    if (tabindex != undefined) {
+        focusProperties['tabindex'] = { value: tabindex, valid: true };
+    } else {
+        if (axs.utils.isElementImplicitlyFocusable(element))
+            focusProperties['implicitlyFocusable'] = { value: true, valid: true };
+    }
+    if (Object.keys(focusProperties).length == 0)
+        return null;
+    var transparent = axs.utils.elementIsTransparent(element);
+    var zeroArea = axs.utils.elementHasZeroArea(element);
+    var outsideScrollArea = axs.utils.elementIsOutsideScrollArea(element);
+    var overlappingElements = axs.utils.overlappingElements(element);
+    if (transparent || zeroArea || outsideScrollArea || overlappingElements.length > 0) {
+        var hidden = axs.utils.isElementOrAncestorHidden(element);
+        var visibleProperties = { value: false,
+                                  valid: hidden };
+        if (transparent)
+            visibleProperties['transparent'] = true;
+        if (zeroArea)
+            visibleProperties['zeroArea'] = true;
+        if (outsideScrollArea)
+            visibleProperties['outsideScrollArea'] = true;
+        if (overlappingElements && overlappingElements.length > 0)
+            visibleProperties['overlappingElements'] = overlappingElements;
+        var hiddenProperties = { value: hidden, valid: hidden };
+        if (hidden)
+            hiddenProperties['reason'] = axs.properties.getHiddenReason(element);
+        visibleProperties['hidden'] = hiddenProperties;
+        focusProperties['visible'] = visibleProperties;
+    } else {
+        focusProperties['visible'] = { value: true, valid: true };
+    }
+
+    return focusProperties;
 }
+
+axs.properties.getHiddenReason = function(element) {
+    if (!element || !(element instanceof element.ownerDocument.defaultView.HTMLElement))
+      return null;
+
+    if (element.hasAttribute('chromevoxignoreariahidden'))
+        var chromevoxignoreariahidden = true;
+
+    var style = window.getComputedStyle(element, null);
+    if (style.display == 'none')
+        return { 'property': 'display: none',
+                 'on': element };
+
+    if (style.visibility == 'hidden')
+        return { 'property': 'visibility: hidden',
+                 'on': element };
+
+    if (element.hasAttribute('aria-hidden') &&
+        element.getAttribute('aria-hidden').toLowerCase() == 'true') {
+        if (!chromevoxignoreariahidden)
+            return { 'property': 'aria-hidden',
+                     'on': element };
+    }
+
+    return axs.properties.getHiddenReason(element.parentElement);
+}
+
 
 /**
  * @param {Element} element
@@ -55,11 +113,17 @@ axs.properties.getColorProperties = function(element) {
  * @return {boolean}
  */
 axs.properties.hasDirectTextDescendant = function(element) {
-    var selectorResults = document.evaluate(axs.properties.TEXT_CONTENT_XPATH,
-                                            element,
-                                            null,
-                                            XPathResult.ANY_TYPE,
-                                            null);
+    var ownerDocument;
+    if (element.nodeType == Node.DOCUMENT_NODE)
+        ownerDocument = element;
+    else
+        ownerDocument = element.ownerDocument;
+
+    var selectorResults = ownerDocument.evaluate(axs.properties.TEXT_CONTENT_XPATH,
+                                                 element,
+                                                 null,
+                                                 XPathResult.ANY_TYPE,
+                                                 null);
     var foundDirectTextDescendant = false;
     for (var resultElement = selectorResults.iterateNext();
          resultElement != null;
@@ -106,9 +170,11 @@ axs.properties.getContrastRatioProperties = function(element) {
  * @param {Node} node
  * @param {!Object} textAlternatives The properties object to fill in
  * @param {boolean=} opt_recursive Whether this is a recursive call or not
+ * @param {boolean=} opt_force Whether to return text alternatives for this
+ *     element regardless of its hidden state.
  * @return {?string} The calculated text alternative for the given element
  */
-axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recursive) {
+axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recursive, opt_force) {
     var recursive = opt_recursive || false;
 
     /** @type {Element} */ var element = axs.utils.asElement(node);
@@ -117,7 +183,7 @@ axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recur
 
     // 1. Skip hidden elements unless the author specifies to use them via an aria-labelledby or
     // aria-describedby being used in the current computation.
-    if (!recursive && axs.utils.isElementOrAncestorHidden(element))
+    if (!recursive && !opt_force && axs.utils.isElementOrAncestorHidden(element))
         return null;
 
     // if this is a text node, just return text content.
@@ -159,7 +225,10 @@ axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recur
     // language attribute or element for associating a label, and use those mechanisms to determine
     // a text alternative.
     if (!element.hasAttribute('role') || element.getAttribute('role') != 'presentation') {
-        computedName = axs.properties.getTextFromHostLangaugeAttributes(element, textAlternatives, computedName);
+        computedName = axs.properties.getTextFromHostLanguageAttributes(element,
+                                                                        textAlternatives,
+                                                                        computedName,
+                                                                        recursive);
     }
 
     // 2B (HTML version).
@@ -184,6 +253,7 @@ axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recur
         // If the embedded control is a menu, use the text alternative of the chosen menu item.
         // If the embedded control is a select or combobox, use the chosen option.
         if (element instanceof defaultView.HTMLSelectElement) {
+            var inputElement = /** @type {HTMLSelectElement} */ (element);
             textAlternatives['controlValue'] = { 'text': inputElement.value };
         }
 
@@ -249,8 +319,17 @@ axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recur
 
     // 2C. Otherwise, if the attributes checked in rules A and B didn't provide results, text is
     // collected from descendant content if the current element's role allows "Name From: contents."
+    var hasRole = element.hasAttribute('role');
+    var canGetNameFromContents = true;
+    if (hasRole) {
+        var roleName = element.getAttribute('role');
+        // if element has a role, check that it allows "Name From: contents"
+        var role = axs.constants.ARIA_ROLES[roleName];
+        if (role && (!role.namefrom || role.namefrom.indexOf('contents') < 0))
+            canGetNameFromContents = false;
+    }
     var textFromContent = axs.properties.getTextFromDescendantContent(element);
-    if (textFromContent) {
+    if (textFromContent && canGetNameFromContents) {
         var textFromContentValue = {};
         textFromContentValue.type = 'text';
         textFromContentValue.text = textFromContent;
@@ -288,25 +367,20 @@ axs.properties.findTextAlternatives = function(node, textAlternatives, opt_recur
  * @return {?string}
  */
 axs.properties.getTextFromDescendantContent = function(element) {
-    var hasRole = element.hasAttribute('role');
-    if (hasRole) {
-        var roleName = element.getAttribute('role');
-        // if element has a role, check that it allows "Name From: contents"
-        var role = axs.constants.ARIA_ROLES[roleName];
-        if (role && (!role.namefrom || role.namefrom.indexOf('contents') < 0))
-            return null;
-    }
-    // Also get text from descendant contents if there is no role - e.g. p, span or div
     var children = element.childNodes;
     var childrenTextContent = [];
     for (var i = 0; i < children.length; i++) {
         var childTextContent = axs.properties.findTextAlternatives(children[i], {}, true);
-        if (childTextContent && childTextContent.trim().length > 0)
+        if (childTextContent)
             childrenTextContent.push(childTextContent.trim());
     }
-    if (childrenTextContent.length)
-        return childrenTextContent.join(' ');
-
+    if (childrenTextContent.length) {
+        var result = '';
+        // Empty children are allowed, but collapse all of them
+        for (var i = 0; i < childrenTextContent.length; i++)
+            result = [result, childrenTextContent[i]].join(' ').trim();
+        return result;
+    }
     return null;
 };
 
@@ -357,7 +431,10 @@ axs.properties.getTextFromAriaLabelledby = function(element, textAlternatives) {
     return computedName;
 };
 
-axs.properties.getTextFromHostLangaugeAttributes = function(element, textAlternatives, existingComputedname) {
+axs.properties.getTextFromHostLanguageAttributes = function(element,
+                                                            textAlternatives,
+                                                            existingComputedname,
+                                                            recursive) {
     var computedName = existingComputedname;
     if (axs.browserUtils.matchSelector(element, 'img')) {
         if (element.hasAttribute('alt')) {
@@ -391,9 +468,9 @@ axs.properties.getTextFromHostLangaugeAttributes = function(element, textAlterna
                             'textarea:not([disabled])',
                             'button:not([disabled])',
                             'video:not([disabled])'].join(', ');
-    if (axs.browserUtils.matchSelector(element, controlsSelector)) {
+    if (axs.browserUtils.matchSelector(element, controlsSelector) && !recursive) {
         if (element.hasAttribute('id')) {
-            var labelForQuerySelector = 'label[for=' + element.id + ']';
+            var labelForQuerySelector = 'label[for="' + element.id + '"]';
             var labelsFor = document.querySelectorAll(labelForQuerySelector);
             var labelForValue = {};
             var labelForValues = [];
@@ -473,7 +550,7 @@ axs.properties.getLastWord = function(text) {
  */
 axs.properties.getTextProperties = function(node) {
     var textProperties = {};
-    var computedName = axs.properties.findTextAlternatives(node, textProperties);
+    var computedName = axs.properties.findTextAlternatives(node, textProperties, false, true);
 
     if (Object.keys(textProperties).length == 0) {
         if (!computedName)

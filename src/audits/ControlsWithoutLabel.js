@@ -14,6 +14,7 @@
 
 goog.require('axs.AuditRule');
 goog.require('axs.AuditRules');
+goog.require('axs.browserUtils');
 goog.require('axs.constants.Severity');
 goog.require('axs.utils');
 
@@ -31,7 +32,20 @@ axs.AuditRule.specs.controlsWithoutLabel = {
                                 'textarea:not([disabled])',
                                 'button:not([disabled])',
                                 'video:not([disabled])'].join(', ');
-        return axs.browserUtils.matchSelector(element, controlsSelector);
+        var isControl = axs.browserUtils.matchSelector(element, controlsSelector);
+        if (!isControl)
+            return false;
+        if (element.tabIndex >= 0)
+            return true;
+        // Ignore elements which have negative tabindex and an ancestor with a
+        // widget role, since they can be accessed neither with tab nor with
+        // a screen reader
+        for (var parent = element.parentElement; parent != null;
+             parent = parent.parentElement) {
+            if (axs.utils.elementIsAriaWidget(parent))
+                return false;
+        }
+        return true;
     },
     test: function(control) {
         if (axs.utils.isElementOrAncestorHidden(control))
